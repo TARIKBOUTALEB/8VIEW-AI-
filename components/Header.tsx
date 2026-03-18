@@ -42,7 +42,12 @@ export const Header: React.FC<HeaderProps> = ({
     { code: 'en', label: 'English' },
     { code: 'fr', label: 'Français' },
     { code: 'es', label: 'Español' },
-    { code: 'ar', label: 'العربية' }
+    { code: 'pt', label: 'Português' },
+    { code: 'it', label: 'Italiano' },
+    { code: 'hi', label: 'हिन्दी' },
+    { code: 'ja', label: '日本語' },
+    { code: 'ar', label: 'العربية' },
+    { code: 'zh', label: '中文' }
   ];
 
   return (

@@ -37,6 +37,7 @@ const App: React.FC = () => {
   const [showConfirmation, setShowConfirmation] = useState<{files: File[], previews: string[], isExpert: boolean} | null>(null);
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [renameValue, setRenameValue] = useState('');
+  const [userApiKey, setUserApiKey] = useState('');
   
   const [viewsMatrix, setViewsMatrix] = useState<{ [key: string]: string }>({});
   const [currentAxis, setCurrentAxis] = useState({ h: 1, v: 1 });
@@ -64,11 +65,6 @@ const App: React.FC = () => {
   const handleGenerate = async () => {
     if (!selectedImage || pipelineStep !== 'idle') return;
     
-    if ((window as any).aistudio) {
-        const hasKey = await (window as any).aistudio.hasSelectedApiKey();
-        if (!hasKey) await (window as any).aistudio.openSelectKey();
-    }
-    
     setImages(prev => prev.map(img => img.id === selectedId ? { ...img, status: 'En cours' } : img));
     
     try {
@@ -76,22 +72,28 @@ const App: React.FC = () => {
       await new Promise(r => setTimeout(r, 1000));
       setPipelineStep('geometry');
       
-      let apiKey = '';
-      try {
-        apiKey = process.env.API_KEY || '';
-      } catch (e) {
-        // Ignore ReferenceError if process is not defined
-      }
+      // Utilisation de la clé API fournie par l'utilisateur ou par défaut
+      let apiKey: string | undefined = userApiKey;
       if (!apiKey) {
-        // @ts-ignore
-        apiKey = import.meta.env.VITE_API_KEY || '';
+        try {
+          const configRes = await fetch('/api/config');
+          if (configRes.ok) {
+            const configData = await configRes.json();
+            apiKey = configData.apiKey;
+          }
+        } catch (err) {
+          console.warn("Impossible de récupérer la configuration API depuis le serveur", err);
+        }
       }
-        
-      if (!apiKey) {
-        throw new Error("Clé API non trouvée. Si vous êtes sur Vercel/Netlify, ajoutez VITE_API_KEY dans vos variables d'environnement.");
-      }
+      
+      // Fallback pour l'environnement de développement AI Studio
+      apiKey = apiKey || process.env.GEMINI_API_KEY;
 
-      const ai = new GoogleGenAI({ apiKey });
+      if (!apiKey || apiKey === "undefined") throw new Error(t.errors.missingApiKey);
+      
+      const finalApiKey = apiKey.trim();
+      
+      const ai = new GoogleGenAI({ apiKey: finalApiKey });
       const sourceUrls = (selectedImage as any).sourceViews || [selectedImage.originalUrl];
       const isExpert = (selectedImage as any).isExpert;
       
@@ -119,9 +121,9 @@ const App: React.FC = () => {
         Maintain pixel-perfect scale consistency between all 9 tiles.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3-pro-image-preview',
+        model: 'gemini-2.5-flash-image',
         contents: { parts: [...imageParts, { text: promptText }] },
-        config: { imageConfig: { aspectRatio: "1:1", imageSize: "1K" } }
+        config: { imageConfig: { aspectRatio: "1:1" } }
       });
 
       setPipelineStep('rendering'); 
@@ -132,22 +134,22 @@ const App: React.FC = () => {
         if (p.inlineData) res = `data:image/png;base64,${p.inlineData.data}`; 
       });
       
-      if (!res) throw new Error("Aucune image générée par le modèle");
+      if (!res) throw new Error(t.errors.noImageGenerated);
 
       setImages(prev => prev.map(img => img.id === selectedId ? { ...img, resultUrl: res, status: 'Complété' } : img));
       setPipelineStep('complete');
-      addToast('success', "Planche Studio validée en couleurs réelles.");
+      addToast('success', t.toasts.studioValidated);
     } catch (e: any) {
       console.error("AI Generation Error:", e);
       setPipelineStep('idle');
       setImages(prev => prev.map(img => img.id === selectedId ? { ...img, status: 'Échoué' } : img));
-      addToast('error', `Erreur: ${e.message || "Échec de l'analyse AI"}`);
+      addToast('error', `${t.toasts.aiError}: ${e.message || ""}`);
     }
   };
 
   const handleDownloadFullStudioSheet = async () => {
     if (!selectedImage || !selectedImage.resultUrl) return;
-    addToast('info', "Génération de l'export composite...");
+    addToast('info', t.toasts.generatingComposite);
 
     try {
         const sourceImg = new Image();
@@ -201,9 +203,9 @@ const App: React.FC = () => {
         link.href = canvas.toDataURL('image/png');
         link.download = `${selectedImage.name}_FULL_STUDIO_SHEET.png`;
         link.click();
-        addToast('success', "Planche Composite téléchargée.");
+        addToast('success', t.toasts.compositeDownloaded);
     } catch (err) {
-        addToast('error', "Erreur lors de l'export composite.");
+        addToast('error', t.toasts.compositeError);
     }
   };
 
@@ -211,7 +213,7 @@ const App: React.FC = () => {
     if (!selectedImage || !selectedImage.resultUrl) return;
     
     setShowRenameModal(false);
-    addToast('info', "Génération du pack ZIP...");
+    addToast('info', t.toasts.generatingZip);
     
     try {
       const img = new Image();
@@ -253,9 +255,9 @@ const App: React.FC = () => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      addToast('success', "ZIP téléchargé avec succès.");
+      addToast('success', t.toasts.zipDownloaded);
     } catch (err) {
-      addToast('error', "Erreur ZIP.");
+      addToast('error', t.toasts.zipError);
     }
   };
 
@@ -300,7 +302,7 @@ const App: React.FC = () => {
         setCurrentAxis({ h: 1, v: 1 });
         setPipelineStep('complete');
     } catch (err) {
-        addToast('error', "Erreur de matrice.");
+        addToast('error', t.toasts.matrixError);
         setPipelineStep('complete');
     }
   };
@@ -365,7 +367,7 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen-safe bg-background text-text overflow-hidden">
-      {showLanding && <LandingPage t={t} onEnter={() => setShowLanding(false)} currentLang={lang} onLanguageChange={setLang} />}
+      {showLanding && <LandingPage t={t} onEnter={(key) => { setUserApiKey(key); setShowLanding(false); }} currentLang={lang} onLanguageChange={setLang} />}
       
       {showRenameModal && (
         <RenameModal t={t} initialValue={renameValue} onSave={handleSeparateDownload} onClose={() => setShowRenameModal(false)} />

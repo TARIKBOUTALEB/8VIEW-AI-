@@ -15,24 +15,24 @@ COPY . .
 # Construire l'application pour la production
 RUN npm run build
 
-# Étape 2 : Serveur Nginx pour exposer l'application
-FROM nginx:alpine
+# Étape 2 : Serveur Node.js pour exposer l'application
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copier les dépendances et le build
+COPY package*.json ./
+RUN npm install --production
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/server.ts ./server.ts
+
+# Installer tsx pour exécuter server.ts
+RUN npm install -g tsx
 
 # Hugging Face Spaces utilise le port 7860 par défaut
 EXPOSE 7860
+ENV PORT=7860
+ENV NODE_ENV=production
 
-# Configurer Nginx pour écouter sur le port 7860 et gérer le routage SPA (Single Page Application)
-RUN echo 'server { \
-    listen 7860; \
-    location / { \
-        root /usr/share/nginx/html; \
-        index index.html index.htm; \
-        try_files $uri $uri/ /index.html; \
-    } \
-}' > /etc/nginx/conf.d/default.conf
-
-# Copier les fichiers construits depuis l'étape 1 vers le dossier Nginx
-COPY --from=builder /app/dist /usr/share/nginx/html
-
-# Démarrer Nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Démarrer le serveur Node.js
+CMD ["tsx", "server.ts"]

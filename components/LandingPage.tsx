@@ -5,7 +5,7 @@ import { Language } from '../translations';
 
 interface LandingPageProps {
   t: any;
-  onEnter: () => void;
+  onEnter: (apiKey: string) => void;
   currentLang: Language;
   onLanguageChange: (lang: Language) => void;
 }
@@ -13,10 +13,11 @@ interface LandingPageProps {
 export const LandingPage: React.FC<LandingPageProps> = ({ t, onEnter, currentLang, onLanguageChange }) => {
   const [isExiting, setIsExiting] = useState(false);
   const [isLangOpen, setIsLangOpen] = useState(false);
+  const [apiKey, setApiKey] = useState('');
 
   const handleEnter = () => {
     setIsExiting(true);
-    setTimeout(onEnter, 800); 
+    setTimeout(() => onEnter(apiKey), 800); 
   };
   
   const languages: { code: Language; label: string }[] = [
@@ -126,15 +127,29 @@ export const LandingPage: React.FC<LandingPageProps> = ({ t, onEnter, currentLan
               </h1>
           </div>
 
-          <button 
-            onClick={handleEnter}
-            className="neon-button group relative px-12 md:px-14 lg:px-16 py-4 md:py-5 lg:py-6 border border-white/5 text-white text-[10px] md:text-[11px] lg:text-[12px] font-black tracking-[0.6em] uppercase rounded-full bg-white/[0.01] transition-all duration-700 shadow-2xl overflow-hidden"
-          >
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#ff2a2a]/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
-            <span className="relative">
-                {t.landing.enter}
-            </span>
-          </button>
+          <div className="flex flex-col items-center w-full max-w-md px-6 gap-4">
+            <div className="w-full">
+              <label className="block text-[9px] md:text-[10px] font-black tracking-[0.3em] text-white/40 uppercase mb-2 ml-4">
+                {t.landing.apiKeyLabel}
+              </label>
+              <input 
+                type="password" 
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder={t.landing.apiKeyPlaceholder}
+                className="w-full bg-white/[0.03] border border-white/10 rounded-full px-6 py-4 text-white text-[11px] md:text-[12px] tracking-widest placeholder:text-white/20 focus:outline-none focus:border-[#ff2a2a]/50 focus:bg-white/[0.05] transition-all text-center"
+              />
+            </div>
+            <button 
+              onClick={handleEnter}
+              className="neon-button group relative px-12 md:px-14 lg:px-16 py-4 md:py-5 lg:py-6 border border-white/5 text-white text-[10px] md:text-[11px] lg:text-[12px] font-black tracking-[0.6em] uppercase rounded-full bg-white/[0.01] transition-all duration-700 shadow-2xl overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#ff2a2a]/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+              <span className="relative">
+                  {t.landing.enter}
+              </span>
+            </button>
+          </div>
       </div>
       
       <div className="absolute bottom-8 md:bottom-10 lg:bottom-12 left-0 right-0 flex justify-center opacity-10 px-4">

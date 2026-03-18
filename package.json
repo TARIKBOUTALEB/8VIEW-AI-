@@ -4,8 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "tsx server.ts",
     "build": "tsc && vite build",
+    "start": "tsx server.ts",
     "preview": "vite preview",
     "mobile:init": "npm install @capacitor/core @capacitor/cli @capacitor/android && npx cap init",
     "mobile:build": "npm run build && npx cap sync",
@@ -15,6 +16,7 @@
     "@capacitor/android": "^5.7.0",
     "@capacitor/core": "^5.7.0",
     "@google/genai": "^1.42.0",
+    "express": "^5.2.1",
     "jszip": "^3.10.1",
     "lucide-react": "^0.344.0",
     "react": "^18.3.1",
@@ -22,9 +24,11 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^5.7.0",
+    "@types/express": "^5.0.6",
     "@types/react": "^18.2.64",
     "@types/react-dom": "^18.2.21",
     "@vitejs/plugin-react": "^4.2.1",
+    "tsx": "^4.21.0",
     "typescript": "^5.3.3",
     "vite": "^5.1.6"
   }
