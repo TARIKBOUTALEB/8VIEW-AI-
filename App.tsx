@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import JSZip from 'jszip';
 import { MOCK_IMAGES } from './constants';
@@ -12,7 +12,7 @@ import { LandingPage } from './components/LandingPage';
 import { RenameModal } from './components/RenameModal';
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { 
-  Activity, Layout, Scan, X, Layers, Columns, Grid3X3, BookOpen
+  Activity, Layout, Scan, X, Layers, Columns, Grid3X3, BookOpen, Maximize2, Minimize2, ArrowLeft
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -31,18 +31,38 @@ const App: React.FC = () => {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [axisStart, setAxisStart] = useState({ h: 1, v: 1 });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const expertInputRef = useRef<HTMLInputElement>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [showConfirmation, setShowConfirmation] = useState<{files: File[], previews: string[], isExpert: boolean} | null>(null);
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [renameValue, setRenameValue] = useState('');
-  const [userApiKey, setUserApiKey] = useState('');
   
   const [viewsMatrix, setViewsMatrix] = useState<{ [key: string]: string }>({});
   const [currentAxis, setCurrentAxis] = useState({ h: 1, v: 1 });
 
   const selectedImage = images.find(img => img.id === selectedId);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        console.error(`Error attempting to enable fullscreen: ${err.message}`);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  };
 
   const addToast = (type: ToastMessage['type'], message: string) => {
     const id = Date.now().toString();
@@ -65,6 +85,11 @@ const App: React.FC = () => {
   const handleGenerate = async () => {
     if (!selectedImage || pipelineStep !== 'idle') return;
     
+    if ((window as any).aistudio) {
+        const hasKey = await (window as any).aistudio.hasSelectedApiKey();
+        if (!hasKey) await (window as any).aistudio.openSelectKey();
+    }
+    
     setImages(prev => prev.map(img => img.id === selectedId ? { ...img, status: 'En cours' } : img));
     
     try {
@@ -72,28 +97,7 @@ const App: React.FC = () => {
       await new Promise(r => setTimeout(r, 1000));
       setPipelineStep('geometry');
       
-      // Utilisation de la clé API fournie par l'utilisateur ou par défaut
-      let apiKey: string | undefined = userApiKey;
-      if (!apiKey) {
-        try {
-          const configRes = await fetch('/api/config');
-          if (configRes.ok) {
-            const configData = await configRes.json();
-            apiKey = configData.apiKey;
-          }
-        } catch (err) {
-          console.warn("Impossible de récupérer la configuration API depuis le serveur", err);
-        }
-      }
-      
-      // Fallback pour l'environnement de développement AI Studio
-      apiKey = apiKey || process.env.GEMINI_API_KEY;
-
-      if (!apiKey || apiKey === "undefined") throw new Error(t.errors.missingApiKey);
-      
-      const finalApiKey = apiKey.trim();
-      
-      const ai = new GoogleGenAI({ apiKey: finalApiKey });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
       const sourceUrls = (selectedImage as any).sourceViews || [selectedImage.originalUrl];
       const isExpert = (selectedImage as any).isExpert;
       
@@ -121,9 +125,9 @@ const App: React.FC = () => {
         Maintain pixel-perfect scale consistency between all 9 tiles.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
+        model: 'gemini-3-pro-image-preview',
         contents: { parts: [...imageParts, { text: promptText }] },
-        config: { imageConfig: { aspectRatio: "1:1" } }
+        config: { imageConfig: { aspectRatio: "1:1", imageSize: "1K" } }
       });
 
       setPipelineStep('rendering'); 
@@ -134,22 +138,21 @@ const App: React.FC = () => {
         if (p.inlineData) res = `data:image/png;base64,${p.inlineData.data}`; 
       });
       
-      if (!res) throw new Error(t.errors.noImageGenerated);
+      if (!res) throw new Error("Génération échouée");
 
       setImages(prev => prev.map(img => img.id === selectedId ? { ...img, resultUrl: res, status: 'Complété' } : img));
       setPipelineStep('complete');
-      addToast('success', t.toasts.studioValidated);
+      addToast('success', "Planche Studio validée en couleurs réelles.");
     } catch (e: any) {
-      console.error("AI Generation Error:", e);
       setPipelineStep('idle');
       setImages(prev => prev.map(img => img.id === selectedId ? { ...img, status: 'Échoué' } : img));
-      addToast('error', `${t.toasts.aiError}: ${e.message || ""}`);
+      addToast('error', "Échec de l'analyse AI.");
     }
   };
 
   const handleDownloadFullStudioSheet = async () => {
     if (!selectedImage || !selectedImage.resultUrl) return;
-    addToast('info', t.toasts.generatingComposite);
+    addToast('info', "Génération de l'export composite...");
 
     try {
         const sourceImg = new Image();
@@ -203,9 +206,9 @@ const App: React.FC = () => {
         link.href = canvas.toDataURL('image/png');
         link.download = `${selectedImage.name}_FULL_STUDIO_SHEET.png`;
         link.click();
-        addToast('success', t.toasts.compositeDownloaded);
+        addToast('success', "Planche Composite téléchargée.");
     } catch (err) {
-        addToast('error', t.toasts.compositeError);
+        addToast('error', "Erreur lors de l'export composite.");
     }
   };
 
@@ -213,7 +216,7 @@ const App: React.FC = () => {
     if (!selectedImage || !selectedImage.resultUrl) return;
     
     setShowRenameModal(false);
-    addToast('info', t.toasts.generatingZip);
+    addToast('info', "Génération du pack ZIP...");
     
     try {
       const img = new Image();
@@ -255,9 +258,9 @@ const App: React.FC = () => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      addToast('success', t.toasts.zipDownloaded);
+      addToast('success', "ZIP téléchargé avec succès.");
     } catch (err) {
-      addToast('error', t.toasts.zipError);
+      addToast('error', "Erreur ZIP.");
     }
   };
 
@@ -302,7 +305,7 @@ const App: React.FC = () => {
         setCurrentAxis({ h: 1, v: 1 });
         setPipelineStep('complete');
     } catch (err) {
-        addToast('error', t.toasts.matrixError);
+        addToast('error', "Erreur de matrice.");
         setPipelineStep('complete');
     }
   };
@@ -367,38 +370,36 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen-safe bg-background text-text overflow-hidden">
-      {showLanding && <LandingPage t={t} onEnter={(key) => { setUserApiKey(key); setShowLanding(false); }} currentLang={lang} onLanguageChange={setLang} />}
+      {showLanding && <LandingPage t={t} onEnter={() => setShowLanding(false)} currentLang={lang} onLanguageChange={setLang} />}
       
       {showRenameModal && (
         <RenameModal t={t} initialValue={renameValue} onSave={handleSeparateDownload} onClose={() => setShowRenameModal(false)} />
       )}
       
       {showConfirmation && (
-         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6 bg-black/98 backdrop-blur-3xl">
-            <div className={`bg-surface border border-white/5 rounded-3xl sm:rounded-[3rem] p-6 sm:p-12 max-w-3xl w-full text-center shadow-2xl relative overflow-hidden max-h-[90vh] flex flex-col`}>
-               <div className="flex items-center justify-center gap-2 sm:gap-4 mb-6 sm:mb-8 shrink-0">
-                  <div className={`px-3 sm:px-4 py-1 rounded-full text-[8px] sm:text-[10px] font-black tracking-widest uppercase italic border ${showConfirmation.isExpert ? 'border-primary text-primary bg-primary/5' : 'border-white/10 text-muted'}`}>
-                     {showConfirmation.isExpert ? 'EXPERT BUNDLE MODE' : 'SINGLE SOURCE'}
-                  </div>
-                  <div className="text-white/20 text-[8px] sm:text-[10px] font-bold uppercase tracking-widest">{showConfirmation.files.length} FILE(S)</div>
-               </div>
-               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 sm:gap-3 mb-6 sm:mb-10 overflow-y-auto p-4 sm:p-6 bg-black/40 rounded-2xl sm:rounded-[2rem] border border-white/5 no-scrollbar shrink">
-                   {showConfirmation.previews.map((prev, idx) => (
-                       <div key={idx} className="relative aspect-square">
-                          <img src={prev} className="w-full h-full object-contain rounded-lg sm:rounded-xl bg-surfaceHighlight border border-white/10" />
-                       </div>
-                   ))}
-               </div>
-               <div className="shrink-0">
-                 <h3 className="text-2xl sm:text-4xl font-black text-white uppercase italic tracking-tighter mb-8 sm:mb-12">SYNTHÈSE STUDIO AI</h3>
-                 <div className="flex flex-col gap-3 sm:gap-4">
-                    <button onClick={finalizeImport} className="w-full py-4 sm:py-6 bg-primary text-white text-[10px] sm:text-[12px] font-black tracking-[0.3em] sm:tracking-[0.5em] rounded-xl sm:rounded-2xl hover:bg-accent transition shadow-2xl uppercase italic flex items-center justify-center gap-3 sm:gap-4 active:scale-95">
-                       <Layers size={18} className="w-4 h-4 sm:w-5 sm:h-5" /> INTÉGRER AU WORKFLOW
-                    </button>
-                    <button onClick={() => setShowConfirmation(null)} className="w-full py-3 text-muted hover:text-white text-[9px] sm:text-[10px] font-bold uppercase tracking-widest transition-colors active:scale-95">ANNULER L'IMPORT</button>
-                 </div>
-               </div>
-            </div>
+         <div className="fixed inset-0 z-[110] flex items-center justify-center p-6">
+             <div className={`bg-surface border border-white/5 rounded-[2rem] md:rounded-[3rem] p-6 md:p-12 max-w-3xl w-full text-center shadow-2xl relative overflow-hidden`}>
+                <div className="flex flex-col md:flex-row items-center justify-center gap-2 md:gap-4 mb-6 md:mb-8">
+                   <div className={`px-4 py-1 rounded-full text-[8px] md:text-[10px] font-black tracking-widest uppercase italic border ${showConfirmation.isExpert ? 'border-primary text-primary bg-primary/5' : 'border-white/10 text-muted'}`}>
+                      {showConfirmation.isExpert ? 'EXPERT BUNDLE MODE' : 'SINGLE SOURCE'}
+                   </div>
+                   <div className="text-white/20 text-[8px] md:text-[10px] font-bold uppercase tracking-widest">{showConfirmation.files.length} FILE(S)</div>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-2 md:gap-3 mb-6 md:mb-10 max-h-[30vh] md:max-h-[40vh] overflow-y-auto p-4 md:p-6 bg-black/40 rounded-[1.5rem] md:rounded-[2rem] border border-white/5 no-scrollbar">
+                    {showConfirmation.previews.map((prev, idx) => (
+                        <div key={idx} className="relative aspect-square">
+                           <img src={prev} className="w-full h-full object-contain rounded-lg md:rounded-xl bg-surfaceHighlight border border-white/10" />
+                        </div>
+                    ))}
+                </div>
+                <h3 className="text-2xl md:text-4xl font-black text-white uppercase italic tracking-tighter mb-8 md:mb-12">SYNTHÈSE STUDIO AI</h3>
+                <div className="flex flex-col gap-3 md:gap-4">
+                   <button onClick={finalizeImport} className="w-full py-4 md:py-6 bg-primary text-white text-[10px] md:text-[12px] font-black tracking-[0.3em] md:tracking-[0.5em] rounded-xl md:rounded-2xl hover:bg-accent transition shadow-2xl uppercase italic flex items-center justify-center gap-3 md:gap-4">
+                      <Layers size={16} className="md:w-[18px] md:h-[18px]" /> INTÉGRER AU WORKFLOW
+                   </button>
+                   <button onClick={() => setShowConfirmation(null)} className="w-full py-3 text-muted hover:text-white text-[8px] md:text-[10px] font-bold uppercase tracking-widest transition-colors">ANNULER L'IMPORT</button>
+                </div>
+             </div>
          </div>
       )}
 
@@ -417,17 +418,20 @@ const App: React.FC = () => {
       <div className="flex flex-1 overflow-hidden relative">
         <Sidebar images={images} selectedId={selectedId || 0} onSelect={handleImageSelect} t={t} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
         <main className="flex-1 flex flex-col relative bg-background studio-grid overflow-hidden">
-          <div className="h-12 sm:h-14 border-b border-white/5 bg-black/40 backdrop-blur-xl px-4 sm:px-8 flex justify-between items-center z-40 shrink-0">
-             <div className="flex items-center gap-2 sm:gap-6">
-                <div className="flex items-center gap-2 sm:gap-3 text-white/20 text-[9px] sm:text-[10px] font-black tracking-widest uppercase italic">
-                  <span className="hidden sm:inline">VIEWPORT:</span> 
-                  <Layout size={14} className="sm:ml-2" /> 
-                  <Scan size={14} />
-                </div>
+          <div className="h-12 md:h-14 border-b border-white/5 bg-black/40 backdrop-blur-xl px-4 md:px-8 flex justify-between items-center z-40 shrink-0">
+             <div className="flex items-center gap-6">
+                <div className="flex items-center gap-2 md:gap-3 text-white/20 text-[8px] md:text-[10px] font-black tracking-widest uppercase italic"><span className="hidden xs:inline">VIEWPORT:</span> <Layout size={12} className="md:w-[14px] md:h-[14px] ml-1 md:ml-2" /> <Scan size={12} className="md:w-[14px] md:h-[14px]" /></div>
              </div>
-             <div className="flex items-center gap-2 sm:gap-4 text-muted text-[9px] sm:text-[10px] font-mono tracking-widest uppercase">
-                {selectedImage?.status === 'En cours' && <span className="text-primary animate-pulse mr-2 sm:mr-4">[AI RENDERING]</span>}
-                {zoomLevel}% <span className="hidden sm:inline">SCALE</span>
+             <div className="flex items-center gap-2 md:gap-4 text-muted text-[8px] md:text-[10px] font-mono tracking-widest uppercase">
+                {selectedImage?.status === 'En cours' && <span className="text-primary animate-pulse mr-2 md:mr-4 truncate max-w-[100px] md:max-w-none">[AI RENDERING]</span>}
+                <span className="hidden xs:inline">{zoomLevel}% SCALE</span>
+                <button 
+                  onClick={toggleFullscreen}
+                  className="ml-2 md:ml-4 p-1.5 hover:bg-white/10 rounded-md transition-colors text-white/40 hover:text-white"
+                  title="Toggle Fullscreen"
+                >
+                  {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                </button>
              </div>
           </div>
           <div className="flex-1 relative overflow-hidden">
@@ -448,8 +452,10 @@ const App: React.FC = () => {
                                 {labels[currentAxis.v][currentAxis.h]}
                             </p>
                         </div>
-                        <div className="absolute bottom-10 flex gap-4 pointer-events-auto">
-                            <button onClick={() => setIs3DView(false)} className="px-8 py-3 bg-white/5 hover:bg-white/10 text-white rounded-full text-[10px] font-black tracking-widest uppercase border border-white/10 transition-all">RETOUR PLANCHE</button>
+                        <div className="absolute bottom-6 md:bottom-10 flex gap-4 pointer-events-auto">
+                            <button onClick={() => setIs3DView(false)} className="px-6 md:px-8 py-3 bg-white/5 hover:bg-white/10 text-white rounded-full text-[10px] font-black tracking-widest uppercase border border-white/10 transition-all flex items-center gap-2">
+                                <ArrowLeft size={14} /> {t.app.backToSheet}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -468,7 +474,7 @@ const App: React.FC = () => {
                     </div>
                     <button 
                         onClick={() => setIsCompositeMode(false)}
-                        className="absolute bottom-10 left-1/2 -translate-x-1/2 px-10 py-4 bg-white text-black font-black text-[10px] tracking-[0.4em] uppercase rounded-full hover:bg-primary hover:text-white transition-all shadow-2xl z-50 flex items-center gap-3 italic"
+                        className="absolute bottom-6 md:bottom-10 left-1/2 -translate-x-1/2 px-6 md:px-10 py-3 md:py-4 bg-white text-black font-black text-[10px] tracking-[0.4em] uppercase rounded-full hover:bg-primary hover:text-white transition-all shadow-2xl z-50 flex items-center gap-3 italic"
                     >
                         <X size={16} /> {t.app.exit}
                     </button>
@@ -521,7 +527,7 @@ const App: React.FC = () => {
                     </div>
                     <button 
                         onClick={() => setIsComparisonMode(false)}
-                        className="absolute bottom-10 left-1/2 -translate-x-1/2 px-10 py-4 bg-white text-black font-black text-[10px] tracking-[0.4em] uppercase rounded-full hover:bg-primary hover:text-white transition-all shadow-2xl z-50 flex items-center gap-3"
+                        className="absolute bottom-6 md:bottom-10 left-1/2 -translate-x-1/2 px-6 md:px-10 py-3 md:py-4 bg-white text-black font-black text-[10px] tracking-[0.4em] uppercase rounded-full hover:bg-primary hover:text-white transition-all shadow-2xl z-50 flex items-center gap-3"
                     >
                         <X size={16} /> {t.app.exit}
                     </button>
@@ -531,9 +537,9 @@ const App: React.FC = () => {
              {/* MAIN VIEWPORT */}
              <div className={`w-full h-full relative bg-background flex items-center justify-center transition-all duration-700 ${is3DView || isComparisonMode || isSeparateExplorerOpen || isCompositeMode ? 'opacity-0 pointer-events-none scale-110 blur-xl' : 'opacity-100 scale-100'}`}>
                 {!selectedImage ? (
-                    <div onClick={() => expertInputRef.current?.click()} className="w-80 h-80 rounded-[5rem] bg-white/[0.01] border-2 border-dashed border-white/10 hover:border-primary/40 flex flex-col items-center justify-center cursor-pointer mb-10 transition-all hover:bg-white/[0.03] group relative overflow-hidden">
-                        <Layers size={64} className="text-muted/10 group-hover:text-primary/20 transition-all duration-500" />
-                        <span className="mt-8 text-[11px] font-black tracking-[0.5em] uppercase text-muted group-hover:text-white transition-colors italic text-center px-8">IMPORTER SOURCES MULTIPLES</span>
+                    <div onClick={() => expertInputRef.current?.click()} className="w-64 h-64 md:w-80 md:h-80 rounded-[4rem] md:rounded-[5rem] bg-white/[0.01] border-2 border-dashed border-white/10 hover:border-primary/40 flex flex-col items-center justify-center cursor-pointer mb-10 transition-all hover:bg-white/[0.03] group relative overflow-hidden mx-4">
+                        <Layers size={48} className="md:w-16 md:h-16 text-muted/10 group-hover:text-primary/20 transition-all duration-500" />
+                        <span className="mt-6 md:mt-8 text-[9px] md:text-[11px] font-black tracking-[0.3em] md:tracking-[0.5em] uppercase text-muted group-hover:text-white transition-colors italic text-center px-6 md:px-8">IMPORTER SOURCES MULTIPLES</span>
                     </div>
                 ) : (
                     <div className="relative group p-10">
@@ -547,39 +553,39 @@ const App: React.FC = () => {
                                 </div>
                             </div>
                         ) : (
-                            <img src={selectedImage.resultUrl || selectedImage.originalUrl} className="max-h-[80vh] rounded-[3rem] shadow-2xl border border-white/5 relative z-10" />
+                            <img src={selectedImage.resultUrl || selectedImage.originalUrl} className="max-h-[60vh] md:max-h-[80vh] rounded-[2rem] md:rounded-[3rem] shadow-2xl border border-white/5 relative z-10 object-contain" />
                         )}
                         {selectedImage.status === 'Brouillon' && !(selectedImage as any).isExpert && (
                             <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-[2px] rounded-[3rem] z-30 opacity-0 hover:opacity-100 transition-opacity duration-500">
-                                <button onClick={handleGenerate} className="px-20 py-8 bg-primary text-white text-[14px] font-black tracking-[0.6em] rounded-2xl hover:bg-accent transition-all shadow-2xl uppercase italic">GÉNÉRER PLANCHE STUDIO</button>
+                                <button onClick={handleGenerate} className="px-8 md:px-20 py-5 md:py-8 bg-primary text-white text-[10px] md:text-[14px] font-black tracking-[0.3em] md:tracking-[0.6em] rounded-2xl hover:bg-accent transition-all shadow-2xl uppercase italic text-center mx-4">GÉNÉRER PLANCHE STUDIO</button>
                             </div>
                         )}
                         {selectedImage.status === 'Complété' && (
-                            <div className="absolute bottom-6 sm:bottom-10 left-1/2 -translate-x-1/2 z-20 flex items-center justify-center gap-2 sm:gap-4 w-full px-2 sm:px-0">
-                                <div className="flex flex-wrap justify-center gap-2 sm:gap-3 w-full max-w-2xl">
+                            <div className="absolute bottom-6 md:bottom-10 left-0 right-0 z-20 flex items-center justify-center w-full">
+                                <div className="flex overflow-x-auto no-scrollbar w-full px-6 pb-4 pt-2 gap-3 justify-start md:justify-center snap-x snap-mandatory mask-edges">
                                     <button 
                                         onClick={handleReconstruct3D} 
-                                        className="flex-1 sm:flex-none justify-center px-3 sm:px-6 py-3 sm:py-4 bg-black/80 backdrop-blur-3xl border border-primary/30 text-primary hover:text-white hover:bg-primary transition-all rounded-xl sm:rounded-full text-[8px] sm:text-[10px] font-black tracking-[0.2em] sm:tracking-[0.3em] uppercase shadow-2xl flex items-center gap-2 sm:gap-3 italic active:scale-95"
+                                        className="shrink-0 snap-center px-6 py-4 bg-black/80 backdrop-blur-3xl border border-primary/30 text-primary hover:text-white hover:bg-primary transition-all rounded-full text-[10px] font-black tracking-[0.3em] uppercase shadow-2xl flex items-center gap-3 italic"
                                     >
-                                        <Activity size={16} className="sm:w-[18px] sm:h-[18px]" /> <span className="hidden xs:inline">{t.app.reconstruct3D}</span><span className="xs:hidden">3D</span>
+                                        <Activity size={18} /> {t.app.reconstruct3D}
                                     </button>
                                     <button 
                                         onClick={() => setIsCompositeMode(true)} 
-                                        className="flex-1 sm:flex-none justify-center px-3 sm:px-6 py-3 sm:py-4 bg-black/80 backdrop-blur-3xl border border-white/10 text-white hover:bg-white hover:text-black transition-all rounded-xl sm:rounded-full text-[8px] sm:text-[10px] font-black tracking-[0.2em] sm:tracking-[0.3em] uppercase shadow-2xl flex items-center gap-2 sm:gap-3 italic active:scale-95"
+                                        className="shrink-0 snap-center px-6 py-4 bg-black/80 backdrop-blur-3xl border border-white/10 text-white hover:bg-white hover:text-black transition-all rounded-full text-[10px] font-black tracking-[0.3em] uppercase shadow-2xl flex items-center gap-3 italic"
                                     >
-                                        <BookOpen size={16} className="sm:w-[18px] sm:h-[18px]" /> <span className="hidden xs:inline">{t.app.compositeSheet}</span><span className="xs:hidden">COMPOSITE</span>
+                                        <BookOpen size={18} /> {t.app.compositeSheet}
                                     </button>
                                     <button 
                                         onClick={handleOpenExplorer} 
-                                        className="flex-1 sm:flex-none justify-center px-3 sm:px-6 py-3 sm:py-4 bg-black/80 backdrop-blur-3xl border border-white/10 text-white hover:bg-white hover:text-black transition-all rounded-xl sm:rounded-full text-[8px] sm:text-[10px] font-black tracking-[0.2em] sm:tracking-[0.3em] uppercase shadow-2xl flex items-center gap-2 sm:gap-3 italic active:scale-95"
+                                        className="shrink-0 snap-center px-6 py-4 bg-black/80 backdrop-blur-3xl border border-white/10 text-white hover:bg-white hover:text-black transition-all rounded-full text-[10px] font-black tracking-[0.3em] uppercase shadow-2xl flex items-center gap-3 italic"
                                     >
-                                        <Grid3X3 size={16} className="sm:w-[18px] sm:h-[18px]" /> <span className="hidden xs:inline">{t.app.exploreViews}</span><span className="xs:hidden">EXPLORER</span>
+                                        <Grid3X3 size={18} /> {t.app.exploreViews}
                                     </button>
                                     <button 
                                         onClick={() => setIsComparisonMode(true)} 
-                                        className="flex-1 sm:flex-none justify-center px-3 sm:px-6 py-3 sm:py-4 bg-black/80 backdrop-blur-3xl border border-white/10 text-white/40 hover:text-white hover:bg-white/10 transition-all rounded-xl sm:rounded-full text-[8px] sm:text-[10px] font-black tracking-[0.2em] sm:tracking-[0.3em] uppercase shadow-2xl flex items-center gap-2 sm:gap-3 italic active:scale-95"
+                                        className="shrink-0 snap-center px-6 py-4 bg-black/80 backdrop-blur-3xl border border-white/10 text-white/40 hover:text-white hover:bg-white/10 transition-all rounded-full text-[10px] font-black tracking-[0.3em] uppercase shadow-2xl flex items-center gap-3 italic"
                                     >
-                                        <Columns size={16} className="sm:w-[18px] sm:h-[18px]" /> <span className="hidden xs:inline">{t.app.compare}</span><span className="xs:hidden">COMPARE</span>
+                                        <Columns size={18} /> {t.app.compare}
                                     </button>
                                 </div>
                             </div>
@@ -588,10 +594,10 @@ const App: React.FC = () => {
                 )}
              </div>
              {pipelineStep !== 'idle' && pipelineStep !== 'complete' && (
-                <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-50 bg-black/98 backdrop-blur-3xl px-14 py-8 rounded-[2.5rem] border border-white/10 flex items-center gap-12 shadow-2xl border-b-2 border-b-primary overflow-hidden">
-                    <div className="relative"><div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div></div>
-                    <div className="flex flex-col">
-                        <span className="text-[13px] font-black tracking-[0.5em] text-white uppercase italic">
+                <div className="absolute bottom-8 md:bottom-12 left-4 right-4 md:left-1/2 md:-translate-x-1/2 z-50 bg-black/98 backdrop-blur-3xl px-6 md:px-14 py-6 md:py-8 rounded-[2rem] md:rounded-[2.5rem] border border-white/10 flex items-center gap-6 md:gap-12 shadow-2xl border-b-2 border-b-primary overflow-hidden">
+                    <div className="relative shrink-0"><div className="w-8 h-8 md:w-12 md:h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div></div>
+                    <div className="flex flex-col min-w-0">
+                        <span className="text-[10px] md:text-[13px] font-black tracking-[0.3em] md:tracking-[0.5em] text-white uppercase italic truncate">
                             {pipelineStep === 'rendering' ? "FUSION CHROMATIQUE..." : "STUDIO PREVIEW..."}
                         </span>
                     </div>

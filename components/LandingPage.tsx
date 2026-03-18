@@ -5,7 +5,7 @@ import { Language } from '../translations';
 
 interface LandingPageProps {
   t: any;
-  onEnter: (apiKey: string) => void;
+  onEnter: () => void;
   currentLang: Language;
   onLanguageChange: (lang: Language) => void;
 }
@@ -13,11 +13,10 @@ interface LandingPageProps {
 export const LandingPage: React.FC<LandingPageProps> = ({ t, onEnter, currentLang, onLanguageChange }) => {
   const [isExiting, setIsExiting] = useState(false);
   const [isLangOpen, setIsLangOpen] = useState(false);
-  const [apiKey, setApiKey] = useState('');
 
   const handleEnter = () => {
     setIsExiting(true);
-    setTimeout(() => onEnter(apiKey), 800); 
+    setTimeout(onEnter, 800); 
   };
   
   const languages: { code: Language; label: string }[] = [
@@ -59,14 +58,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ t, onEnter, currentLan
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-[#ff0000]/5 rounded-full blur-[160px] pointer-events-none"></div>
       
       {/* Langue Burger */}
-      <div className="absolute top-safe-top right-4 sm:top-10 sm:right-10 z-50 mt-4 sm:mt-0">
+      <div className="absolute top-10 right-10 z-50">
         <div className="relative">
           <button 
              onClick={() => setIsLangOpen(!isLangOpen)}
-             className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 bg-white/[0.02] hover:bg-white/[0.08] border border-white/5 rounded-full text-white/40 hover:text-white transition-all backdrop-blur-xl active:scale-95"
+             className="flex items-center gap-3 p-3 bg-white/[0.02] hover:bg-white/[0.08] border border-white/5 rounded-full text-white/40 hover:text-white transition-all backdrop-blur-xl"
           >
-             <Menu size={20} className="sm:w-[22px] sm:h-[22px]" />
-             <span className="text-[9px] sm:text-[10px] font-black tracking-[0.2em] ml-1">{currentLang.toUpperCase()}</span>
+             <Menu size={22} />
+             <span className="text-[10px] font-black tracking-[0.2em] ml-1">{currentLang.toUpperCase()}</span>
           </button>
           
           {isLangOpen && (
@@ -94,9 +93,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ t, onEnter, currentLan
         </div>
       </div>
 
-      <div className="relative z-10 flex flex-col items-center gap-10 md:gap-14 lg:gap-16">
+      <div className="relative z-10 flex flex-col items-center gap-16">
           <div className="flex flex-col items-center group">
-              <div className="relative w-40 h-40 md:w-56 md:h-56 lg:w-72 lg:h-72 mb-8 md:mb-10 lg:mb-12">
+              <div className="relative w-56 h-56 sm:w-72 sm:h-72 mb-12">
                   <svg 
                     viewBox="0 0 100 100" 
                     className="w-full h-full text-[#ff2a2a] transition-all duration-1000 group-hover:scale-[1.02]"
@@ -122,38 +121,24 @@ export const LandingPage: React.FC<LandingPageProps> = ({ t, onEnter, currentLan
                   </svg>
               </div>
               
-              <h1 className="text-lg md:text-2xl lg:text-4xl font-black text-white tracking-[0.6em] md:tracking-[0.7em] lg:tracking-[0.8em] uppercase italic transition-all duration-700 group-hover:tracking-[0.8em] md:group-hover:tracking-[0.9em] lg:group-hover:tracking-[1em] drop-shadow-[0_0_20px_rgba(255,42,42,0.4)] text-center pl-[0.6em] md:pl-[0.7em] lg:pl-[0.8em]">
+              <h1 className="text-2xl sm:text-4xl font-black text-white tracking-[0.5em] sm:tracking-[0.8em] uppercase italic transition-all duration-700 group-hover:tracking-[0.7em] sm:group-hover:tracking-[1em] drop-shadow-[0_0_20px_rgba(255,42,42,0.4)] text-center ml-[0.5em] sm:ml-[0.8em] group-hover:ml-[0.7em] sm:group-hover:ml-[1em]">
                  8 VIEW AI
               </h1>
           </div>
 
-          <div className="flex flex-col items-center w-full max-w-md px-6 gap-4">
-            <div className="w-full">
-              <label className="block text-[9px] md:text-[10px] font-black tracking-[0.3em] text-white/40 uppercase mb-2 ml-4">
-                {t.landing.apiKeyLabel}
-              </label>
-              <input 
-                type="password" 
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder={t.landing.apiKeyPlaceholder}
-                className="w-full bg-white/[0.03] border border-white/10 rounded-full px-6 py-4 text-white text-[11px] md:text-[12px] tracking-widest placeholder:text-white/20 focus:outline-none focus:border-[#ff2a2a]/50 focus:bg-white/[0.05] transition-all text-center"
-              />
-            </div>
-            <button 
-              onClick={handleEnter}
-              className="neon-button group relative px-12 md:px-14 lg:px-16 py-4 md:py-5 lg:py-6 border border-white/5 text-white text-[10px] md:text-[11px] lg:text-[12px] font-black tracking-[0.6em] uppercase rounded-full bg-white/[0.01] transition-all duration-700 shadow-2xl overflow-hidden"
-            >
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#ff2a2a]/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
-              <span className="relative">
-                  {t.landing.enter}
-              </span>
-            </button>
-          </div>
+          <button 
+            onClick={handleEnter}
+            className="neon-button group relative px-10 md:px-16 py-4 md:py-6 border border-white/5 text-white text-[10px] md:text-[12px] font-black tracking-[0.4em] md:tracking-[0.6em] uppercase rounded-full bg-white/[0.01] transition-all duration-700 shadow-2xl overflow-hidden"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#ff2a2a]/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+            <span className="relative">
+                {t.landing.enter}
+            </span>
+          </button>
       </div>
       
-      <div className="absolute bottom-8 md:bottom-10 lg:bottom-12 left-0 right-0 flex justify-center opacity-10 px-4">
-          <p className="text-[7px] md:text-[8px] lg:text-[9px] font-black tracking-[0.5em] md:tracking-[1em] lg:tracking-[2em] text-white uppercase leading-relaxed text-center pl-[0.5em] md:pl-[1em] lg:pl-[2em]">IMAGE • GIF TURNAROUND • TURNAROUND VIDEO • STUDIO QUALITY</p>
+      <div className="absolute bottom-8 md:bottom-12 left-0 right-0 text-center opacity-10 px-4">
+          <p className="text-[7px] md:text-[9px] font-black tracking-[0.5em] md:tracking-[2em] text-white uppercase leading-relaxed">IMAGE • GIF TURNAROUND • TURNAROUND VIDEO • STUDIO QUALITY</p>
       </div>
     </div>
   );
