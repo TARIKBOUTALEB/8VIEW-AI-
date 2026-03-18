@@ -1,0 +1,7 @@
+{
+  "name": "8VIEW AI STUDIO",
+  "description": "Professional 3D Topology Reference Generator. Powered by Gemini 3 Pro Image.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
